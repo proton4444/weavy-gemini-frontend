@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -15,13 +15,14 @@ import 'reactflow/dist/style.css';
 import { TextNode } from './nodes/TextNode';
 import { GeminiNode } from './nodes/GeminiNode';
 import { OutputNode } from './nodes/OutputNode';
+import { loadWorkflow, saveWorkflow } from '../utils/storage';
 
 interface FlowCanvasProps {
   onNodeClick: (node: Node | null) => void;
   onNodesChange?: (nodes: Node[]) => void;
 }
 
-// Initial nodes with custom types
+// Initial workflow configuration
 const initialNodes: Node[] = [
   {
     id: 'text-1',
@@ -72,31 +73,23 @@ const initialEdges: Edge[] = [
   },
 ];
 
-// Load saved workflow from localStorage
-function loadWorkflow(): { nodes: Node[]; edges: Edge[] } | null {
-  try {
-    const saved = localStorage.getItem('weavy-workflow');
-    if (saved) {
-      return JSON.parse(saved);
-    }
-  } catch (error) {
-    console.error('Error loading workflow:', error);
-  }
-  return null;
-}
+// Default edge styling
+const defaultEdgeOptions = {
+  type: 'smoothstep',
+  style: { stroke: '#3C3C3C', strokeWidth: 1.5 },
+};
 
-// Save workflow to localStorage
-function saveWorkflow(nodes: Node[], edges: Edge[]) {
-  try {
-    localStorage.setItem('weavy-workflow', JSON.stringify({ nodes, edges }));
-  } catch (error) {
-    console.error('Error saving workflow:', error);
-  }
-}
-
+/**
+ * FlowCanvas Component
+ * Main canvas for the node-based workflow editor
+ * Handles:
+ * - Node rendering and interaction
+ * - Edge connections
+ * - Workflow persistence
+ */
 export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChange }) => {
-  // Try to load saved workflow, otherwise use initial nodes/edges
-  const savedWorkflow = loadWorkflow();
+  // Load saved workflow or use initial configuration
+  const savedWorkflow = useMemo(() => loadWorkflow(), []);
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(
     savedWorkflow?.nodes || initialNodes
   );
@@ -104,7 +97,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChan
     savedWorkflow?.edges || initialEdges
   );
 
-  // Define custom node types
+  // Define custom node types mapping
   const nodeTypes: NodeTypes = useMemo(
     () => ({
       text: TextNode,
@@ -114,23 +107,23 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChan
     []
   );
 
-  // Save workflow to localStorage whenever nodes or edges change
-  React.useEffect(() => {
-    saveWorkflow(nodes, edges);
+  // Auto-save workflow to localStorage when nodes or edges change
+  useEffect(() => {
+    saveWorkflow({ nodes, edges });
   }, [nodes, edges]);
 
-  // Update nodes when they change
-  React.useEffect(() => {
-    if (onNodesChange) {
-      onNodesChange(nodes);
-    }
+  // Notify parent component of node changes
+  useEffect(() => {
+    onNodesChange?.(nodes);
   }, [nodes, onNodesChange]);
 
+  // Handle new edge connections
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
 
+  // Handle node click events
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       onNodeClick(node);
@@ -138,11 +131,12 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChan
     [onNodeClick]
   );
 
+  // Handle canvas click (deselect node)
   const handlePaneClick = useCallback(() => {
     onNodeClick(null);
   }, [onNodeClick]);
 
-  // Add onChange handler to text nodes
+  // Inject onChange handlers into text nodes
   const nodesWithHandlers = useMemo(() => {
     return nodes.map((node) => {
       if (node.type === 'text') {
@@ -178,10 +172,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChan
         onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
         className="bg-[#050608]"
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-          style: { stroke: '#3C3C3C', strokeWidth: 1.5 },
-        }}
+        defaultEdgeOptions={defaultEdgeOptions}
         fitView
       >
         <Background color="#1a1a1a" variant={BackgroundVariant.Dots} gap={16} size={1} />
@@ -191,6 +182,6 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({ onNodeClick, onNodesChan
   );
 };
 
-// Export for use in App
+// Export initial configuration for testing/reference
 export { initialNodes, initialEdges };
 export type { FlowCanvasProps };
